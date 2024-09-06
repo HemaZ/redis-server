@@ -1,7 +1,6 @@
 #ifndef __TCP_CONNECTION_HPP__
 #define __TCP_CONNECTION_HPP__
-#include "quill_wrapper/overwrite_macros.h"
-#include "quill_wrapper/quill_wrapper.h"
+#include "Logging.hpp"
 #include <asio.hpp>
 #include <functional>
 #include <memory>
@@ -17,7 +16,7 @@ public:
   }
   tcp::socket &socket() { return socket_; }
   void start() {
-    asio::async_read_until(socket_, recvMsg, "\r\n",
+    asio::async_read_until(socket_, recvMsg_, "\r\n",
                            std::bind(&TCPConnection::handle_new_message,
                                      shared_from_this(),
                                      std::placeholders::_1));
@@ -26,7 +25,7 @@ public:
 private:
   void handle_new_message(const std::error_code &error) {
     std::string messageStr =
-        std::string((std::istreambuf_iterator<char>(&recvMsg)),
+        std::string((std::istreambuf_iterator<char>(&recvMsg_)),
                     std::istreambuf_iterator<char>());
     LOG_INFO("Received a new message {}", messageStr);
     std::string message = "+PONG\r\n";
@@ -43,6 +42,6 @@ private:
     }
   }
   tcp::socket socket_;
-  asio::streambuf recvMsg;
+  asio::streambuf recvMsg_;
 };
 #endif

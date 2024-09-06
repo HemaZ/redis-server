@@ -1,8 +1,7 @@
 #ifndef __TCP_SERVER_HPP__
 #define __TCP_SERVER_HPP__
+#include "Logging.hpp"
 #include "TCPConnection.hpp"
-#include "quill_wrapper/overwrite_macros.h"
-#include "quill_wrapper/quill_wrapper.h"
 #include <asio.hpp>
 
 using asio::ip::tcp;

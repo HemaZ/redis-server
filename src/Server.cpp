@@ -1,6 +1,5 @@
+#include "Logging.hpp"
 #include "TCPServer.hpp"
-#include "quill_wrapper/overwrite_macros.h"
-#include "quill_wrapper/quill_wrapper.h"
 #include <arpa/inet.h>
 #include <asio.hpp>
 #include <cstdint>
