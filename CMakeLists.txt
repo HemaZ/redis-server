@@ -10,6 +10,7 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 
 find_package(Threads REQUIRED)
 add_subdirectory(3rdparty/quill)
+add_subdirectory(3rdparty/quill_wrapper)
 
 # Force the script to use FetchContent and not CPM internally to fetch asio
 option(ASIO_USE_CPM "Download Asio with CPM instead of FetchContent" OFF)
@@ -31,4 +32,4 @@ FetchContent_MakeAvailable(asiocmake)
 add_executable(server ${SOURCE_FILES})
 
 target_link_libraries(server PRIVATE asio asio::asio)
-target_link_libraries(server PRIVATE Threads::Threads quill::quill)
+target_link_libraries(server PRIVATE Threads::Threads quill_wrapper_recommended)
