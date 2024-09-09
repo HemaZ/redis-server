@@ -32,5 +32,5 @@ extern quill::Logger *global_logger_a;
 #define LOG_WARNING(fmt, ...)                                                  \
   QUILL_LOG_WARNING(global_logger_a, fmt, ##__VA_ARGS__)
 #define LOG_ERROR(fmt, ...) QUILL_LOG_ERROR(global_logger_a, fmt, ##__VA_ARGS__)
-
+#define LOG_DEBUG(fmt, ...) QUILL_LOG_DEBUG(global_logger_a, fmt, ##__VA_ARGS__)
 // etc ..
