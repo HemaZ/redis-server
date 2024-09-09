@@ -43,14 +43,21 @@ std::optional<std::vector<std::string>> parseArray(const std::string &command) {
   if (command.empty() || command[0] != DataType::ARRAY) {
     return std::nullopt;
   }
-  std::vector<std::string> outArray;
-  // TODO match arrays
   std::regex pattern(R"([^\r\n]+)");
   auto words_begin =
       std::sregex_iterator(command.begin(), command.end(), pattern);
   auto words_end = std::sregex_iterator();
-  std::cout << "Found " << std::distance(words_begin, words_end) << " words\n";
-  return outArray;
+  std::vector<std::string> words;
+  for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
+    std::smatch match = *i;
+    std::string match_str = match.str();
+    if (match_str.empty())
+      continue;
+    if (match_str[0] == DataType::B_STRING && std::next(i, 1) != words_end) {
+      words.push_back(std::next(i, 1)->str());
+    }
+  }
+  return words;
 }
 
 } // namespace RESP

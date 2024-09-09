@@ -29,3 +29,11 @@ TEST(RESP_PARSING, BulkString) {
   auto val5 = RESP::parseBString("$\r\necho\r\n");
   EXPECT_EQ(val5, std::nullopt);
 }
+
+TEST(RESP_PARSING, Array) {
+  auto val = RESP::parseArray("*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n");
+  EXPECT_TRUE(val.has_value());
+  EXPECT_EQ(val->size(), 2);
+  EXPECT_EQ(val->at(0), "ECHO");
+  EXPECT_EQ(val->at(1), "hey");
+}
