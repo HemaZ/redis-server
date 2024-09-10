@@ -7,11 +7,14 @@ namespace Redis {
 class Server {
 public:
   Server() {}
-  std::string handleSingleCommand(const std::string &message);
+  std::optional<std::string> handleSingleCommand(const std::string &message);
   std::optional<std::string> handleRequest(const std::string &message);
+  std::optional<std::string>
+  handleMultipleCommands(const std::vector<std::string> &commands);
 
 private:
-  std::string handleCommands(const std::vector<std::string> &commands);
+  std::optional<std::string>
+  handleCommands(const std::vector<std::string> &commands);
 };
 } // namespace Redis
 

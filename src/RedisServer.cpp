@@ -4,23 +4,33 @@
 #include "RESP/Parsing.hpp"
 namespace Redis {
 
-std::string Server::handleSingleCommand(const std::string &message) {
+std::optional<std::string>
+Server::handleSingleCommand(const std::string &message) {
   LOG_DEBUG("Received Command {} ", message);
   if (message == "ping") {
     return "+PONG\r\n";
   }
   if (message == "COMMAND") {
-    return "\r\n";
+    return "+PONG\r\n";
   }
-  return "";
+  return std::nullopt;
 }
 
-std::string Server::handleCommands(const std::vector<std::string> &commands) {
+std::optional<std::string>
+Server::handleMultipleCommands(const std::vector<std::string> &commands) {
+  if (commands[0] == "echo" || commands[0] == "ECHO") {
+    return "+" + commands[1] + "\r\n";
+  }
+  return std::nullopt;
+}
+
+std::optional<std::string>
+Server::handleCommands(const std::vector<std::string> &commands) {
   LOG_DEBUG("Commands Received {}", commands);
   if (commands.size() == 1) {
     return handleSingleCommand(commands[0]);
   }
-  return "";
+  return handleMultipleCommands(commands);
 }
 
 std::optional<std::string> Server::handleRequest(const std::string &message) {
@@ -35,7 +45,7 @@ std::optional<std::string> Server::handleRequest(const std::string &message) {
   std::optional<std::vector<std::string>> commands = RESP::parseArray(message);
   if (!commands) {
     LOG_DEBUG("Recived a non array command {}", message);
-    return "";
+    return std::nullopt;
   }
   return handleCommands(*commands);
 }
