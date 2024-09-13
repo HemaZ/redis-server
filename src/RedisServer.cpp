@@ -4,6 +4,18 @@
 #include "RESP/Parsing.hpp"
 namespace Redis {
 
+std::optional<std::string> Server::getValue(const std::string &key) const {
+  if (data_.contains(key)) {
+    return data_.at(key);
+  }
+  return std::nullopt;
+}
+
+void Server::setValue(const std::string &key, const std::string &value) {
+  std::lock_guard<std::mutex> lock(dataMutex_);
+  data_[key] = value;
+}
+
 std::optional<std::string>
 Server::handleSingleCommand(const std::string &message) {
   LOG_DEBUG("Received Command {} ", message);
@@ -20,6 +32,21 @@ std::optional<std::string>
 Server::handleMultipleCommands(const std::vector<std::string> &commands) {
   if (commands[0] == "echo" || commands[0] == "ECHO") {
     return "+" + commands[1] + "\r\n";
+  }
+  if (commands[0] == "get" || commands[0] == "GET") {
+    LOG_DEBUG("Getting the value {}", commands[1]);
+    auto val = getValue(commands[1]);
+    if (val) {
+      return RESP::toBString(*val);
+    } else {
+      return "$-1\r\n";
+    }
+    return "+" + commands[1] + "\r\n";
+  }
+  if (commands[0] == "set" || commands[0] == "SET") {
+    LOG_DEBUG("Setting the key {} to {}", commands[1], commands[2]);
+    setValue(commands[1], commands[2]);
+    return "+OK\r\n";
   }
   return std::nullopt;
 }

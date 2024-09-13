@@ -37,3 +37,8 @@ TEST(RESP_PARSING, Array) {
   EXPECT_EQ(val->at(0), "ECHO");
   EXPECT_EQ(val->at(1), "hey");
 }
+
+TEST(RESP_PARSING, toBString) {
+  std::string val = RESP::toBString("bar");
+  EXPECT_EQ(val, "$3\r\nbar\r\n");
+}

@@ -12,11 +12,12 @@ using asio::ip::tcp;
 class TCPConnection : public std::enable_shared_from_this<TCPConnection> {
 public:
   using ptr = std::shared_ptr<TCPConnection>;
-  TCPConnection(asio::io_context &io_context)
-      : ioContext(io_context), socket_(ioContext) {}
+  TCPConnection(asio::io_context &io_context, Redis::Server::SharedPtr redisPtr)
+      : rServer(redisPtr), ioContext(io_context), socket_(ioContext) {}
 
-  static ptr create(asio::io_context &io_context) {
-    return std::make_shared<TCPConnection>(io_context);
+  static ptr create(asio::io_context &io_context,
+                    Redis::Server::SharedPtr redisPtr) {
+    return std::make_shared<TCPConnection>(io_context, redisPtr);
   }
   tcp::socket &socket() { return socket_; }
   void start() {
@@ -40,7 +41,7 @@ private:
       return;
     }
     std::optional<std::string> message =
-        rServer.handleRequest(messageStr); //"+PONG\r\n";
+        rServer->handleRequest(messageStr); //"+PONG\r\n";
     if (!message) {
       LOG_DEBUG("no message to send. ");
       asio::post(ioContext,
@@ -60,7 +61,7 @@ private:
       start();
     }
   }
-  Redis::Server rServer;
+  Redis::Server::SharedPtr rServer;
   asio::io_context &ioContext;
   tcp::socket socket_;
   asio::streambuf recvMsg_;

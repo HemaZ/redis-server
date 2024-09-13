@@ -60,5 +60,9 @@ std::optional<std::vector<std::string>> parseArray(const std::string &command) {
   return words;
 }
 
+std::string toBString(const std::string &input) {
+  return "$" + std::to_string(input.size()) + "\r\n" + input + "\r\n";
+}
+
 } // namespace RESP
 #endif
