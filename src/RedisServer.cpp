@@ -4,16 +4,27 @@
 #include "RESP/Parsing.hpp"
 namespace Redis {
 
-std::optional<std::string> Server::getValue(const std::string &key) const {
+std::optional<std::string> Server::getValue(const std::string &key) {
   if (data_.contains(key)) {
-    return data_.at(key);
+    const Record &record = data_.at(key);
+    if (!data_.at(key).expired()) {
+      return data_.at(key).data;
+    } else {
+      data_.erase(key);
+    }
   }
   return std::nullopt;
 }
 
-void Server::setValue(const std::string &key, const std::string &value) {
+void Server::setValue(const std::string &key, const std::string &value,
+                      std::optional<int> expiry) {
+  Record newRecord;
+  newRecord.data = value;
+  if (expiry) {
+    newRecord.setExpiry(*expiry);
+  }
   std::lock_guard<std::mutex> lock(dataMutex_);
-  data_[key] = value;
+  data_[key] = newRecord;
 }
 
 std::optional<std::string>
@@ -44,13 +55,27 @@ Server::handleMultipleCommands(const std::vector<std::string> &commands) {
     return "+" + commands[1] + "\r\n";
   }
   if (commands[0] == "set" || commands[0] == "SET") {
-    LOG_DEBUG("Setting the key {} to {}", commands[1], commands[2]);
-    setValue(commands[1], commands[2]);
-    return "+OK\r\n";
+    return setCommand(commands);
   }
   return std::nullopt;
 }
-
+std::string Server::setCommand(const std::vector<std::string> &commands) {
+  if (commands.size() != 3 && commands.size() != 5) {
+    return "$-1\r\n";
+  }
+  std::optional<int> expiry;
+  if (commands.size() == 5) {
+    try {
+      expiry = std::stoi(commands[4]);
+      LOG_INFO("Expiry time is {}ms", *expiry);
+    } catch (std::invalid_argument const &ex) {
+      LOG_ERROR("Expiry time is invalid {}", ex.what());
+    }
+  }
+  LOG_DEBUG("Setting the key {} to {}", commands[1], commands[2]);
+  setValue(commands[1], commands[2], expiry);
+  return "+OK\r\n";
+}
 std::optional<std::string>
 Server::handleCommands(const std::vector<std::string> &commands) {
   LOG_DEBUG("Commands Received {}", commands);
