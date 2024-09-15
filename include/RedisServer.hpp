@@ -1,5 +1,6 @@
 #ifndef REDIS_SERVER_HPP
 #define REDIS_SERVER_HPP
+#include "Config.hpp"
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -40,8 +41,10 @@ private:
   std::optional<std::string>
   handleCommands(const std::vector<std::string> &commands);
   std::string setCommand(const std::vector<std::string> &commands);
+  std::string configCommand(const std::vector<std::string> &commands);
   std::unordered_map<std::string, Record> data_;
   std::mutex dataMutex_;
+  Config config_;
 };
 } // namespace Redis
 

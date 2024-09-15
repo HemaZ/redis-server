@@ -64,5 +64,13 @@ std::string toBString(const std::string &input) {
   return "$" + std::to_string(input.size()) + "\r\n" + input + "\r\n";
 }
 
+std::string toStringArray(const std::vector<std::string> &array) {
+  std::string out = "*" + std::to_string(array.size()) + "\r\n";
+  for (const auto &str : array) {
+    out += toBString(str);
+  }
+  return out;
+}
+
 } // namespace RESP
 #endif

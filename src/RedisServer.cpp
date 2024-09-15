@@ -57,8 +57,12 @@ Server::handleMultipleCommands(const std::vector<std::string> &commands) {
   if (commands[0] == "set" || commands[0] == "SET") {
     return setCommand(commands);
   }
+  if (commands[0] == "config" || commands[0] == "CONFIG") {
+    return configCommand(commands);
+  }
   return std::nullopt;
 }
+
 std::string Server::setCommand(const std::vector<std::string> &commands) {
   if (commands.size() != 3 && commands.size() != 5) {
     return "$-1\r\n";
@@ -76,6 +80,16 @@ std::string Server::setCommand(const std::vector<std::string> &commands) {
   setValue(commands[1], commands[2], expiry);
   return "+OK\r\n";
 }
+
+std::string Server::configCommand(const std::vector<std::string> &commands) {
+  if (commands[1] == "GET" || commands[1] == "get") {
+    auto value = config_.getField(commands[2]);
+    std::string valueStr = value.to_string();
+    return RESP::toStringArray({commands[2], valueStr});
+  }
+  return "$-1\r\n";
+}
+
 std::optional<std::string>
 Server::handleCommands(const std::vector<std::string> &commands) {
   LOG_DEBUG("Commands Received {}", commands);
@@ -101,4 +115,5 @@ std::optional<std::string> Server::handleRequest(const std::string &message) {
   }
   return handleCommands(*commands);
 }
+
 } // namespace Redis

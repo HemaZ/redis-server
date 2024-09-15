@@ -12,6 +12,11 @@ find_package(Threads REQUIRED)
 add_subdirectory(3rdparty/quill)
 add_subdirectory(3rdparty/quill_wrapper)
 
+# build RTTR
+add_subdirectory(3rdparty/rttr)
+find_package(RTTR CONFIG REQUIRED Core)
+
+
 # Force the script to use FetchContent and not CPM internally to fetch asio
 option(ASIO_USE_CPM "Download Asio with CPM instead of FetchContent" OFF)
 option(
@@ -42,6 +47,6 @@ FetchContent_MakeAvailable(googletest)
 add_executable(server ${SOURCE_FILES})
 
 target_link_libraries(server PRIVATE asio asio::asio)
-target_link_libraries(server PRIVATE Threads::Threads quill_wrapper_recommended)
+target_link_libraries(server PRIVATE Threads::Threads quill_wrapper_recommended RTTR::Core)
 
 add_subdirectory(tests)
