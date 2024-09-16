@@ -1,7 +1,7 @@
 #include "RedisServer.hpp"
 #include "Helper.hpp"
 #include "Logging.hpp"
-#include "RESP/Parsing.hpp"
+#include "RESP/RESP.hpp"
 namespace Redis {
 
 std::optional<std::string> Server::getValue(const std::string &key) {
@@ -50,7 +50,7 @@ Server::handleMultipleCommands(const std::vector<std::string> &commands) {
     if (val) {
       return RESP::toBString(*val);
     } else {
-      return "$-1\r\n";
+      return RESP::NullBString;
     }
     return "+" + commands[1] + "\r\n";
   }
@@ -65,7 +65,7 @@ Server::handleMultipleCommands(const std::vector<std::string> &commands) {
 
 std::string Server::setCommand(const std::vector<std::string> &commands) {
   if (commands.size() != 3 && commands.size() != 5) {
-    return "$-1\r\n";
+    return RESP::NullBString;
   }
   std::optional<int> expiry;
   if (commands.size() == 5) {
@@ -87,7 +87,7 @@ std::string Server::configCommand(const std::vector<std::string> &commands) {
     std::string valueStr = value.to_string();
     return RESP::toStringArray({commands[2], valueStr});
   }
-  return "$-1\r\n";
+  return RESP::NullBString;
 }
 
 std::optional<std::string>
