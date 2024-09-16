@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.13)
 
 project(redis-server)
+# add dependencies
+include(cmake/CPM.cmake)
 
 file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
 include_directories(include)
@@ -13,9 +15,22 @@ add_subdirectory(3rdparty/quill)
 add_subdirectory(3rdparty/quill_wrapper)
 
 # build RTTR
-add_subdirectory(3rdparty/rttr)
-find_package(RTTR CONFIG REQUIRED Core)
-
+CPMAddPackage(
+  NAME rttr # link against RTTR::Core_Lib
+  VERSION 0.9.6
+  GITHUB_REPOSITORY rttrorg/rttr
+  OPTIONS
+    "BUILD_RTTR_DYNAMIC Off"
+    "BUILD_UNIT_TESTS Off"
+    "BUILD_STATIC On"
+    "BUILD_PACKAGE Off"
+    "BUILD_WITH_RTTI On"
+    "BUILD_EXAMPLES Off"
+    "BUILD_DOCUMENTATION Off"
+    "BUILD_INSTALLER Off"
+    "USE_PCH Off"
+    "CUSTOM_DOXYGEN_STYLE Off"
+)
 
 # Force the script to use FetchContent and not CPM internally to fetch asio
 option(ASIO_USE_CPM "Download Asio with CPM instead of FetchContent" OFF)
@@ -34,19 +49,20 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(asiocmake)
 
 
-include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+CPMAddPackage(
+  NAME googletest
+  GITHUB_REPOSITORY google/googletest
+  GIT_TAG release-1.8.1
+  VERSION 1.8.1
+  OPTIONS
+      "INSTALL_GTEST OFF"
+      "gtest_force_shared_crt ON"
 )
-# For Windows: Prevent overriding the parent project's compiler/linker settings
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
 
 
 add_executable(server ${SOURCE_FILES})
 
 target_link_libraries(server PRIVATE asio asio::asio)
-target_link_libraries(server PRIVATE Threads::Threads quill_wrapper_recommended RTTR::Core)
+target_link_libraries(server PRIVATE Threads::Threads quill_wrapper_recommended RTTR::Core_Lib)
 
 add_subdirectory(tests)
