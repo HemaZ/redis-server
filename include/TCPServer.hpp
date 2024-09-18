@@ -1,23 +1,35 @@
 #ifndef __TCP_SERVER_HPP__
 #define __TCP_SERVER_HPP__
 #include "Logging.hpp"
-#include "TCPConnection.hpp"
 #include "RedisServer.hpp"
+#include "TCPConnection.hpp"
 #include <asio.hpp>
 
 using asio::ip::tcp;
 class TCPServer {
 public:
+  /**
+   * @brief Construct a new TCPServer.
+   *
+   * @param io asio io context.
+   * @param port Port number.
+   */
   explicit TCPServer(asio::io_context &io, int port = 6379)
-      : ioContext_(io), acceptor_(ioContext_, tcp::endpoint(tcp::v4(), port)),redisPtr(std::make_shared<Redis::Server>()) {}
+      : ioContext_(io), acceptor_(ioContext_, tcp::endpoint(tcp::v4(), port)),
+        redisPtr(std::make_shared<Redis::Server>()) {}
 
+  /**
+   * @brief Start listening on the port and accept new connections.
+   *
+   */
   void start() {
     LOG_INFO("Waiting for client to connect");
-    TCPConnection::ptr newClient = TCPConnection::create(ioContext_,redisPtr);
+    TCPConnection::SharedPtr newClient =
+        TCPConnection::create(ioContext_, redisPtr);
     acceptor_.async_accept(newClient->socket(),
                            [this, newClient](std::error_code error) {
                              if (!error) {
-                               LOG_INFO("A client connected sucessfully");
+                               LOG_INFO("A client connected successfully");
                                newClient->start();
                              }
                              start();

@@ -5,6 +5,10 @@
 using namespace rttr;
 
 namespace Redis {
+/**
+ * @brief Redis Server config.
+ *
+ */
 struct Config {
   std::string dir = "/tmp/redis-data";
   std::string dbfilename = "dump.rdb";
