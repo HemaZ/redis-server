@@ -1,8 +1,22 @@
 #include "RedisServer.hpp"
 #include "Helper.hpp"
 #include "Logging.hpp"
+#include "RDBFile.hpp"
 #include "RESP/RESP.hpp"
+#include <filesystem>
+namespace fs = std::filesystem;
+
 namespace Redis {
+
+Server::Server() {
+  fs::path rdbFilePath = fs::path(config_.dir) / fs::path(config_.dbfilename);
+  auto rdbDatabase = parseRDBFile(rdbFilePath);
+  if (rdbDatabase) {
+    LOG_INFO("Loaded RDB file from the path {} with {} records",
+             config_.dbfilename, rdbDatabase->size());
+    data_ = *rdbDatabase;
+  }
+}
 
 std::optional<std::string> Server::getValue(const std::string &key) {
   if (data_.contains(key)) {

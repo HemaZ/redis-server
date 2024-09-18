@@ -59,10 +59,19 @@ CPMAddPackage(
       "gtest_force_shared_crt ON"
 )
 
+CPMAddPackage(
+  NAME cxxopts
+  GITHUB_REPOSITORY jarro2783/cxxopts
+  VERSION 2.2.0
+  OPTIONS
+    "CXXOPTS_BUILD_EXAMPLES Off"
+    "CXXOPTS_BUILD_TESTS Off"
+)
+## TODO Split to libray
+add_library(redis_server src/RDBFile.cpp src/RedisServer.cpp)
+target_link_libraries(redis_server PUBLIC asio asio::asio Threads::Threads quill_wrapper_recommended RTTR::Core_Lib)
 
-add_executable(server ${SOURCE_FILES})
-
-target_link_libraries(server PRIVATE asio asio::asio)
-target_link_libraries(server PRIVATE Threads::Threads quill_wrapper_recommended RTTR::Core_Lib)
+add_executable(server src/Server.cpp)
+target_link_libraries(server redis_server cxxopts)
 
 add_subdirectory(tests)
