@@ -16,6 +16,7 @@ std::optional<Database> parseDatabase(std::ifstream &fs) {
   u_char byte;
   fs.read(reinterpret_cast<char *>(bytes), 4); // first 4 bytes
   Database data;
+  std::optional<Record> record = Record{};
   while (fs.read(reinterpret_cast<char *>(&byte), 1)) {
     if (byte == 0x00) {
       u_char length;
@@ -30,8 +31,25 @@ std::optional<Database> parseDatabase(std::ifstream &fs) {
       std::vector<u_char> value(static_cast<int>(length));
       fs.read(reinterpret_cast<char *>(value.data()), static_cast<int>(length));
       std::string valStr(value.begin(), value.end());
-
-      data[keyStr] = {valStr};
+      record->data = valStr;
+      data[keyStr] = *record;
+      record = Record{};
+    } else if (byte == OpCodes::EXPIRETIMEMS) {
+      u_char bytes[8];
+      fs.read(reinterpret_cast<char *>(bytes),
+              8); // expire timestamp unix epoch ms
+      unsigned long ts = *reinterpret_cast<unsigned long *>(bytes);
+      LOG_DEBUG("Expiry date {} ms ", ts);
+      record->setExpiry(ts);
+    } else if (byte == OpCodes::EXPIRETIME) {
+      u_char bytes[4];
+      fs.read(reinterpret_cast<char *>(bytes),
+              4); // expire timestamp unix epoch seconds
+      unsigned int ts = *reinterpret_cast<unsigned int *>(bytes);
+      LOG_DEBUG("Expiry date {} s ", ts);
+      record->setExpiry(ts);
+    } else if (byte == OpCodes::EORDBF) {
+      break;
     }
   }
   return data;
