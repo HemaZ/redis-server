@@ -4,6 +4,7 @@
 #include "RDBFile.hpp"
 #include "RESP/RESP.hpp"
 #include <filesystem>
+#include <regex>
 namespace fs = std::filesystem;
 
 namespace Redis {
@@ -44,7 +45,7 @@ void Server::setValue(const std::string &key, const std::string &value,
 std::optional<std::string>
 Server::handleSingleCommand(const std::string &message) {
   LOG_DEBUG("Received Command {} ", message);
-  if (message == "ping") {
+  if (message == "ping" || message == "PING") {
     return "+PONG\r\n";
   }
   if (message == "COMMAND") {
@@ -73,6 +74,9 @@ Server::handleMultipleCommands(const std::vector<std::string> &commands) {
   }
   if (commands[0] == "config" || commands[0] == "CONFIG") {
     return configCommand(commands);
+  }
+  if (commands[0] == "keys" || commands[0] == "KEYS") {
+    return keysCommand(commands);
   }
   return std::nullopt;
 }
@@ -104,6 +108,26 @@ std::string Server::configCommand(const std::vector<std::string> &commands) {
   return RESP::NullBString;
 }
 
+std::string Server::keysCommand(const std::vector<std::string> &commands) {
+  if (commands.size() != 2) {
+    return RESP::NullBString;
+  }
+  std::string pattern = commands[1];
+  if (size_t loc = pattern.find('*'); loc != std::string::npos) {
+    pattern.insert(loc, ".");
+  }
+  LOG_DEBUG("Searching using the pattern {}", pattern);
+  const std::regex regex(pattern);
+  std::vector<std::string> matchedKeys;
+  for (const auto &record : data_) {
+    if (std::regex_match(record.first, regex)) {
+      matchedKeys.push_back(record.first);
+    }
+  }
+  LOG_DEBUG("Matched KEYS {}", matchedKeys);
+  return RESP::toStringArray(matchedKeys);
+}
+
 std::optional<std::string>
 Server::handleCommands(const std::vector<std::string> &commands) {
   LOG_DEBUG("Commands Received {}", commands);
@@ -115,16 +139,16 @@ Server::handleCommands(const std::vector<std::string> &commands) {
 
 std::optional<std::string> Server::handleRequest(const std::string &message) {
   if (message.empty()) {
-    LOG_DEBUG("Recived an empty message");
+    LOG_DEBUG("Received an empty message");
     return "\r\n";
   }
   if (message[0] != RESP::DataType::ARRAY) {
-    LOG_DEBUG("Recived a non array command {}", message);
+    LOG_DEBUG("Received a non array command {}", message);
     return "\r\n";
   }
   std::optional<std::vector<std::string>> commands = RESP::parseArray(message);
   if (!commands) {
-    LOG_DEBUG("Recived a non array command {}", message);
+    LOG_DEBUG("Received a non array command {}", message);
     return std::nullopt;
   }
   return handleCommands(*commands);
