@@ -14,9 +14,10 @@ public:
    * @param io asio io context.
    * @param port Port number.
    */
-  explicit TCPServer(asio::io_context &io, int port = 6379)
+  explicit TCPServer(asio::io_context &io, int port,
+                     Redis::Server::SharedPtr redisServer)
       : ioContext_(io), acceptor_(ioContext_, tcp::endpoint(tcp::v4(), port)),
-        redisPtr(std::make_shared<Redis::Server>()) {}
+        redisPtr(redisServer) {}
 
   /**
    * @brief Start listening on the port and accept new connections.
