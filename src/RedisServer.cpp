@@ -10,6 +10,7 @@ namespace fs = std::filesystem;
 namespace Redis {
 
 Server::Server() {
+  initCmdsLUT();
   fs::path rdbFilePath = fs::path(config_.dir) / fs::path(config_.dbfilename);
   auto rdbDatabase = parseRDBFile(rdbFilePath);
   if (rdbDatabase) {
@@ -17,6 +18,22 @@ Server::Server() {
              config_.dbfilename, rdbDatabase->size());
     data_ = *rdbDatabase;
   }
+}
+
+void Server::initCmdsLUT() {
+  cmdsLUT["ping"] =
+      std::bind(&Server::pingCommand, this, std::placeholders::_1);
+  cmdsLUT["command"] =
+      std::bind(&Server::pingCommand, this, std::placeholders::_1);
+  cmdsLUT["echo"] =
+      std::bind(&Server::echoCommand, this, std::placeholders::_1);
+  cmdsLUT["get"] = std::bind(&Server::getCommand, this, std::placeholders::_1);
+  cmdsLUT["set"] = std::bind(&Server::setCommand, this, std::placeholders::_1);
+  cmdsLUT["config"] =
+      std::bind(&Server::configCommand, this, std::placeholders::_1);
+  cmdsLUT["keys"] =
+      std::bind(&Server::keysCommand, this, std::placeholders::_1);
+  LOG_DEBUG("Init CMDS LUT with {} commands", cmdsLUT.size());
 }
 
 std::optional<std::string> Server::getValue(const std::string &key) {
@@ -43,42 +60,33 @@ void Server::setValue(const std::string &key, const std::string &value,
 }
 
 std::optional<std::string>
-Server::handleSingleCommand(const std::string &message) {
-  LOG_DEBUG("Received Command {} ", message);
-  if (message == "ping" || message == "PING") {
-    return "+PONG\r\n";
+Server::handleCommands(const std::vector<std::string> &commands) {
+  std::string command = strTolower(commands[0]);
+  try {
+    return cmdsLUT.at(command)(commands);
+  } catch (const std::out_of_range &e) {
+    LOG_ERROR("Unrecognised command {}", command);
+    return std::nullopt;
   }
-  if (message == "COMMAND") {
-    return "+PONG\r\n";
-  }
-  return std::nullopt;
 }
 
-std::optional<std::string>
-Server::handleMultipleCommands(const std::vector<std::string> &commands) {
-  if (commands[0] == "echo" || commands[0] == "ECHO") {
-    return "+" + commands[1] + "\r\n";
+std::string Server::pingCommand(const std::vector<std::string> &commands) {
+  return "+PONG\r\n";
+}
+
+std::string Server::echoCommand(const std::vector<std::string> &commands) {
+  return "+" + commands[1] + "\r\n";
+}
+
+std::string Server::getCommand(const std::vector<std::string> &commands) {
+  LOG_DEBUG("Getting the value {}", commands[1]);
+  auto val = getValue(commands[1]);
+  if (val) {
+    return RESP::toBString(*val);
+  } else {
+    return RESP::NullBString;
   }
-  if (commands[0] == "get" || commands[0] == "GET") {
-    LOG_DEBUG("Getting the value {}", commands[1]);
-    auto val = getValue(commands[1]);
-    if (val) {
-      return RESP::toBString(*val);
-    } else {
-      return RESP::NullBString;
-    }
-    return "+" + commands[1] + "\r\n";
-  }
-  if (commands[0] == "set" || commands[0] == "SET") {
-    return setCommand(commands);
-  }
-  if (commands[0] == "config" || commands[0] == "CONFIG") {
-    return configCommand(commands);
-  }
-  if (commands[0] == "keys" || commands[0] == "KEYS") {
-    return keysCommand(commands);
-  }
-  return std::nullopt;
+  return "+" + commands[1] + "\r\n";
 }
 
 std::string Server::setCommand(const std::vector<std::string> &commands) {
@@ -126,15 +134,6 @@ std::string Server::keysCommand(const std::vector<std::string> &commands) {
   }
   LOG_DEBUG("Matched KEYS {}", matchedKeys);
   return RESP::toStringArray(matchedKeys);
-}
-
-std::optional<std::string>
-Server::handleCommands(const std::vector<std::string> &commands) {
-  LOG_DEBUG("Commands Received {}", commands);
-  if (commands.size() == 1) {
-    return handleSingleCommand(commands[0]);
-  }
-  return handleMultipleCommands(commands);
 }
 
 std::optional<std::string> Server::handleRequest(const std::string &message) {

@@ -33,6 +33,12 @@ public:
 
 private:
   /**
+   * @brief Initialize the cmdsLUT which holds redis command as a key
+   * and the corresponding parsing function as value.
+   */
+  void initCmdsLUT();
+
+  /**
    * @brief Given list of command and arguments. parse it and return the
    * response.
    *
@@ -41,26 +47,6 @@ private:
    */
   std::optional<std::string>
   handleCommands(const std::vector<std::string> &commands);
-
-  /**
-   * @brief Parse a redis command which doesn't have any argument. for example
-   * `PING`.
-   *
-   * @param cmd The command as string.
-   * @return std::optional<std::string> The response to this command.
-   */
-  std::optional<std::string> handleSingleCommand(const std::string &cmd);
-
-  /**
-   * @brief Parse a redis command which takes arguments. The first element in
-   * the list is the command name, the following elements are the command
-   * arguments.
-   *
-   * @param commands List of the command and arguments.
-   * @return std::optional<std::string> The response to this command.
-   */
-  std::optional<std::string>
-  handleMultipleCommands(const std::vector<std::string> &commands);
 
   /**
    * @brief Get a stored value giving the key.
@@ -81,6 +67,30 @@ private:
    */
   void setValue(const std::string &key, const std::string &value,
                 std::optional<int> expiry = std::nullopt);
+
+  /**
+   * @brief Parse a `PING` command from redis client.
+   *
+   * @param commands The redis command and it's argument.
+   * @return std::string Server response to the command.
+   */
+  std::string pingCommand(const std::vector<std::string> &commands);
+
+  /**
+   * @brief Parse a `ECHO` command from redis client.
+   *
+   * @param commands The redis command and it's argument.
+   * @return std::string Server response to the command.
+   */
+  std::string echoCommand(const std::vector<std::string> &commands);
+
+  /**
+   * @brief Parse a `GET` command from redis client.
+   *
+   * @param commands The redis command and it's argument.
+   * @return std::string Server response to the command.
+   */
+  std::string getCommand(const std::vector<std::string> &commands);
 
   /**
    * @brief Parse a `SET` command from redis client.
@@ -123,6 +133,14 @@ private:
    *
    */
   Config config_;
+
+  /**
+   * @brief Lookup table for redis command and the corresponding function to
+   * handle this command.
+   */
+  std::unordered_map<
+      std::string, std::function<std::string(const std::vector<std::string> &)>>
+      cmdsLUT;
 };
 } // namespace Redis
 

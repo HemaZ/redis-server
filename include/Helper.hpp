@@ -3,10 +3,10 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
-// static inline std::string toLowerStr(const std::string &s) {
-//   std::string sCopy(s);
-//   return std::transform(sCopy.begin(), sCopy.end(), sCopy.begin(),
-//                         [](unsigned char c) { return std::tolower(c); });
-//   return sCopy;
-// }
+inline std::string strTolower(std::string s) {
+  std::transform(s.begin(), s.end(), s.begin(),
+                 [](unsigned char c) { return std::tolower(c); } // correct
+  );
+  return s;
+}
 #endif
