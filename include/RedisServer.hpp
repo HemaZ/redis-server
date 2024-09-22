@@ -117,6 +117,14 @@ private:
   std::string keysCommand(const std::vector<std::string> &commands);
 
   /**
+   * @brief Parse a `INFO` command from redis client.
+   *
+   * @param commands The redis command and it's argument.
+   * @return std::string Server response to the command.
+   */
+  std::string infoCommand(const std::vector<std::string> &commands);
+
+  /**
    * @brief The main server database. Reading from the database should be thread
    * safe. Inserting in the database should only be done through the function
    * @sa setValue.

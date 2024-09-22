@@ -39,3 +39,16 @@ TEST(REDIS_SERVER, SETGET) {
   ASSERT_TRUE(res.has_value());
   EXPECT_EQ(*res, RESP::NullBString);
 }
+
+TEST(REDIS_SERVER, INFO) {
+  Redis::Server server;
+  auto res = server.handleRequest("*2\r\n$4\r\nINFO\r\n$11\r\replication\r\n");
+  ASSERT_TRUE(res.has_value());
+  EXPECT_EQ(*res, std::string("$11\r\nrole:master\r\n"));
+
+  // This should return only replication info for now
+  // In the future we should check on the other info
+  res = server.handleRequest("*1\r\n$4\r\nINFO\r\n");
+  ASSERT_TRUE(res.has_value());
+  EXPECT_EQ(*res, std::string("$11\r\nrole:master\r\n"));
+}

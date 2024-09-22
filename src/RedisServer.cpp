@@ -33,6 +33,8 @@ void Server::initCmdsLUT() {
       std::bind(&Server::configCommand, this, std::placeholders::_1);
   cmdsLUT["keys"] =
       std::bind(&Server::keysCommand, this, std::placeholders::_1);
+  cmdsLUT["info"] =
+      std::bind(&Server::infoCommand, this, std::placeholders::_1);
   LOG_DEBUG("Init CMDS LUT with {} commands", cmdsLUT.size());
 }
 
@@ -134,6 +136,17 @@ std::string Server::keysCommand(const std::vector<std::string> &commands) {
   }
   LOG_DEBUG("Matched KEYS {}", matchedKeys);
   return RESP::toStringArray(matchedKeys);
+}
+
+std::string Server::infoCommand(const std::vector<std::string> &commands) {
+  constexpr char replication[] = "$11\r\nrole:master\r\n";
+
+  if (commands.size() == 2 && commands[1] == "replication") {
+    // Return replication info only
+    return replication;
+  }
+
+  return replication; // return all available options, more stuff in the future.
 }
 
 std::optional<std::string> Server::handleRequest(const std::string &message) {
