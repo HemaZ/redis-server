@@ -1,6 +1,7 @@
 #ifndef REDIS_SERVER_HPP
 #define REDIS_SERVER_HPP
 #include "Config.hpp"
+#include "TCPClient.hpp"
 #include "Types.hpp"
 #include <chrono>
 #include <memory>
@@ -14,12 +15,17 @@ namespace Redis {
 class Server {
 public:
   using SharedPtr = std::shared_ptr<Redis::Server>;
+
   /**
    * @brief Construct a new Redis Server.
-   *
+   * @param port The server port.
+   * @param masterIp Optional master server ip to create a replica.
+   * @param masterPort Optional master server port to create a replica.
    */
-  Server();
+  Server(int port = 6379, std::optional<std::string> masterIp = std::nullopt,
+         std::optional<int> masterPort = std::nullopt);
 
+  virtual ~Server();
   /**
    * @brief Giving a message from redis client, parse it and return the expected
    * response.
@@ -30,6 +36,15 @@ public:
    * std::nullopt if the message parsing failed.
    */
   std::optional<std::string> handleRequest(const std::string &message);
+
+  /**
+   * @brief Is this server a replica of another master redis server.
+   *
+   * @return Bool True if it's a replica.
+   */
+  bool isReplica() const {
+    return masterIp.has_value() && masterPort.has_value();
+  }
 
 private:
   /**
@@ -124,6 +139,8 @@ private:
    */
   std::string infoCommand(const std::vector<std::string> &commands);
 
+  bool handShakeMaster();
+
   /**
    * @brief The main server database. Reading from the database should be thread
    * safe. Inserting in the database should only be done through the function
@@ -149,6 +166,55 @@ private:
   std::unordered_map<
       std::string, std::function<std::string(const std::vector<std::string> &)>>
       cmdsLUT;
+
+  /**
+   * @brief The port number on which this Redis server is listening.
+   */
+  int port;
+
+  /**
+   * @brief The IP address of the master Redis server, if this server is a
+   * replica. This is std::nullopt if this server is not a replica.
+   */
+  std::optional<std::string> masterIp;
+
+  /**
+   * @brief The port number of the master Redis server, if this server is a
+   * replica. This is std::nullopt if this server is not a replica.
+   */
+  std::optional<int> masterPort;
+
+  /**
+   * @brief The replication ID of the master server.
+   * This is used to identify the replication stream.
+   */
+  std::string masterReplId;
+
+  /**
+   * @brief The current replication offset of this server.
+   * This represents how much of the master's replication stream has been
+   * processed.
+   */
+  int masterReplOffset = 0;
+
+  /**
+   * @brief A TCP client used to connect to the master server when this server
+   * is a replica. This is std::nullopt if this server is not a replica.
+   */
+  std::optional<TCPClient> replicaClient = std::nullopt;
+
+  /**
+   * @brief The I/O context for asynchronous operations.
+   * This is used by Asio for managing asynchronous operations.
+   */
+  asio::io_context ioContext;
+
+  /**
+   * @brief A thread dedicated to running the I/O context.
+   * This allows asynchronous operations to be processed independently of the
+   * main thread.
+   */
+  std::thread ioThread;
 };
 } // namespace Redis
 

@@ -3,14 +3,28 @@
 #include "Logging.hpp"
 #include "RDBFile.hpp"
 #include "RESP/RESP.hpp"
+#include <asio.hpp>
 #include <filesystem>
 #include <regex>
+#include <thread>
+
 namespace fs = std::filesystem;
 
 namespace Redis {
 
-Server::Server() {
+Server::Server(int port, std::optional<std::string> masterIp,
+               std::optional<int> masterPort)
+    : port(port), masterIp(masterIp), masterPort(masterPort),
+      masterReplId(randomString(40)) {
+
   initCmdsLUT();
+
+  if (isReplica() && !handShakeMaster()) {
+    ioContext.stop();
+    ioThread.join();
+    throw std::runtime_error("Couldn't connect to the master server");
+  }
+
   fs::path rdbFilePath = fs::path(config_.dir) / fs::path(config_.dbfilename);
   auto rdbDatabase = parseRDBFile(rdbFilePath);
   if (rdbDatabase) {
@@ -18,6 +32,52 @@ Server::Server() {
              config_.dbfilename, rdbDatabase->size());
     data_ = *rdbDatabase;
   }
+}
+
+Server::~Server() {
+  if (isReplica()) {
+    ioContext.stop();
+    ioThread.join();
+  }
+}
+
+bool Server::handShakeMaster() {
+  replicaClient.emplace(ioContext, *masterIp, *masterPort);
+  ioThread = std::thread([&] { ioContext.run(); });
+  LOG_INFO("Pinging the master server on {} {}", *masterIp, *masterPort);
+  auto readWrite = [&](const std::string_view &cmd,
+                       const std::string_view &expectedReply) -> bool {
+    auto error = replicaClient->send(std::string(cmd));
+    if (error) {
+      LOG_ERROR("Error Sending ping to the master {}", error.message());
+      return false;
+    }
+    std::string reply;
+    error = replicaClient->read(reply);
+    if (error) {
+      LOG_ERROR("Error getting reply from the master {}", error.message());
+      return false;
+    }
+    LOG_INFO("Received reply from master {}", reply);
+    return expectedReply == reply;
+  };
+
+  if (!readWrite("*1\r\n$4\r\nPING\r\n", "+PONG\r\n")) {
+    return false;
+  }
+  if (!readWrite(RESP::toStringArray(
+                     {"REPLCONF", "listening-port", std::to_string(port)}),
+                 "+OK\r\n")) {
+    return false;
+  }
+  if (!readWrite(RESP::toStringArray({"REPLCONF", "capa", "psync2"}),
+                 "+OK\r\n")) {
+    return false;
+  }
+
+  readWrite(RESP::toStringArray({"PSYNC", "?", "-1"}), "");
+
+  return true;
 }
 
 void Server::initCmdsLUT() {
@@ -139,14 +199,23 @@ std::string Server::keysCommand(const std::vector<std::string> &commands) {
 }
 
 std::string Server::infoCommand(const std::vector<std::string> &commands) {
-  constexpr char replication[] = "$11\r\nrole:master\r\n";
+  std::vector<std::string> info;
+  if (isReplica()) {
+    info.push_back("role:slave");
+  } else {
+    info.push_back("role:master");
+  }
+  info.push_back("master_replid:" + masterReplId);
+  info.push_back("master_repl_offset:" + std::to_string(masterReplOffset));
+  info.push_back("");
+  std::string infoBString = RESP::toStringArray(info);
 
   if (commands.size() == 2 && commands[1] == "replication") {
     // Return replication info only
-    return replication;
+    return infoBString;
   }
 
-  return replication; // return all available options, more stuff in the future.
+  return infoBString; // return all available options, more stuff in the future.
 }
 
 std::optional<std::string> Server::handleRequest(const std::string &message) {

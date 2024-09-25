@@ -39,9 +39,18 @@ int main(int argc, char **argv) {
   }
   bool debug = result["debug"].as<bool>();
   int port = result["port"].as<int>();
-  std::optional<std::string> master;
+  std::optional<std::string> masterIp;
+  std::optional<int> masterPort;
   if (result.count("replicaof")) {
-    master = result["replicaof"].as<std::string>();
+    std::string replica = result["replicaof"].as<std::string>();
+    std::size_t index = replica.find(" ");
+    if (index == std::string::npos) {
+      LOG_ERROR("Replica should have the format ServerIP ServerPort");
+      exit(EXIT_FAILURE);
+    }
+    masterIp = replica.substr(0, index);
+    masterPort = std::stoi(replica.substr(index, replica.size() - index));
+    LOG_INFO("Starting a replica server on {}:{}", *masterIp, *masterPort);
   }
 
   // Change the LogLevel to print everything
@@ -50,7 +59,8 @@ int main(int argc, char **argv) {
 
   // Creating the server
   try {
-    Redis::Server::SharedPtr redisServer = std::make_shared<Redis::Server>();
+    Redis::Server::SharedPtr redisServer =
+        std::make_shared<Redis::Server>(port, masterIp, masterPort);
     LOG_INFO("Starting the server on port {}", port);
     asio::io_context io_context;
     TCPServer server(io_context, port, redisServer);

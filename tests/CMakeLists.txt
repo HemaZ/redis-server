@@ -33,6 +33,12 @@ target_link_libraries(
   redis_server quill_wrapper_recommended
 )
 
+add_executable(tcp_client_test tcp_client_test.cpp test_main.cpp)
+target_link_libraries(
+  tcp_client_test
+  gtest gmock
+  redis_server quill_wrapper_recommended
+)
 
 include(GoogleTest)
 gtest_discover_tests(parsing_test)
