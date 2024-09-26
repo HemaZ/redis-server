@@ -95,6 +95,10 @@ void Server::initCmdsLUT() {
       std::bind(&Server::keysCommand, this, std::placeholders::_1);
   cmdsLUT["info"] =
       std::bind(&Server::infoCommand, this, std::placeholders::_1);
+  cmdsLUT["replconf"] =
+      std::bind(&Server::replconfCommand, this, std::placeholders::_1);
+  cmdsLUT["psync"] =
+      std::bind(&Server::psyncCommand, this, std::placeholders::_1);
   LOG_DEBUG("Init CMDS LUT with {} commands", cmdsLUT.size());
 }
 
@@ -216,6 +220,21 @@ std::string Server::infoCommand(const std::vector<std::string> &commands) {
   }
 
   return infoBString; // return all available options, more stuff in the future.
+}
+
+std::string Server::replconfCommand(const std::vector<std::string> &commands) {
+  if (commands.size() != 3) {
+    return RESP::NullBString;
+  }
+  return "+OK\r\n";
+}
+
+std::string Server::psyncCommand(const std::vector<std::string> &commands) {
+  if (commands.size() != 3) {
+    return RESP::NullBString;
+  }
+  return "+FULLRESYNC " + masterReplId + " " +
+         std::to_string(masterReplOffset) + "\r\n";
 }
 
 std::optional<std::string> Server::handleRequest(const std::string &message) {

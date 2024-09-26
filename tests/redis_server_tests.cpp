@@ -59,3 +59,19 @@ TEST(REDIS_SERVER, INFO) {
   // ASSERT_TRUE(res.has_value());
   // EXPECT_NE(res->find("$10\r\nrole:slave\r\n"), std::string::npos);
 }
+
+TEST(REDIS_SERVER, PSYNC) {
+  Redis::Server server;
+  auto res =
+      server.handleRequest("*3\r\n$4\r\npsync\r\n$1\r\n1\r\n$1\r\n2\r\n");
+  ASSERT_TRUE(res.has_value());
+  EXPECT_NE(res->find("+FULLRESYNC"), std::string::npos);
+}
+
+TEST(REDIS_SERVER, REPLCONF) {
+  Redis::Server server;
+  auto res =
+      server.handleRequest("*3\r\n$4\r\nreplconf\r\n$1\r\n1\r\n$1\r\n2\r\n");
+  ASSERT_TRUE(res.has_value());
+  EXPECT_EQ(*res, std::string("+OK\r\n"));
+}

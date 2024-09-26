@@ -139,6 +139,27 @@ private:
    */
   std::string infoCommand(const std::vector<std::string> &commands);
 
+  /**
+   * @brief Parse a `REPLCONF` command from redis client.
+   *
+   * @param commands The redis command and it's argument.
+   * @return std::string Server response to the command.
+   */
+  std::string replconfCommand(const std::vector<std::string> &commands);
+
+  /**
+   * @brief Parse a `PSYNC` command from redis client.
+   *
+   * @param commands The redis command and it's argument.
+   * @return std::string Server response to the command.
+   */
+  std::string psyncCommand(const std::vector<std::string> &commands);
+
+  /**
+   * @brief Handshake with the master server.
+   *
+   * @return True if the handshake is successful, false otherwise.
+   */
   bool handShakeMaster();
 
   /**
