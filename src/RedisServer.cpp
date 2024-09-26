@@ -30,7 +30,7 @@ Server::Server(int port, std::optional<std::string> masterIp,
   if (rdbDatabase) {
     LOG_INFO("Loaded RDB file from the path {} with {} records",
              config_.dbfilename, rdbDatabase->size());
-    data_ = *rdbDatabase;
+    data_.insert(rdbDatabase->begin(), rdbDatabase->end());
   }
 }
 
@@ -77,6 +77,37 @@ bool Server::handShakeMaster() {
 
   readWrite(RESP::toStringArray({"PSYNC", "?", "-1"}), "");
 
+  std::string rdbFile;
+  auto error = replicaClient->read(rdbFile);
+  if (error) {
+    LOG_ERROR("Error getting rdb file from the master {}", error.message());
+    return false;
+  }
+
+  LOG_INFO("RDB file received from master, {}", rdbFile);
+  fs::path rdbFilePath = fs::path(config_.dir) / fs::path("replica.rdb");
+  // Open a new binary file to write the RDB content
+  std::ofstream outFile(rdbFilePath, std::ios::binary);
+  if (!outFile) {
+    LOG_ERROR("Failed to create {} file", rdbFilePath.string());
+    return false;
+  }
+  std::string rdbFileContent = rdbFile.substr(rdbFile.find("\r\n") + 2);
+  // Write the content of rdbFile to the new file
+  outFile.write(rdbFileContent.data(), rdbFileContent.size());
+  if (!outFile) {
+    LOG_ERROR("Failed to write RDB data to replica.rdb");
+    return false;
+  }
+  outFile.close();
+  LOG_INFO("RDB file successfully written to replica.rdb");
+
+  auto rdbDatabase = parseRDBFile(rdbFilePath);
+  if (rdbDatabase) {
+    LOG_INFO("Loaded Replica RDB file from the path {} with {} records",
+             config_.dbfilename, rdbDatabase->size());
+    data_.insert(rdbDatabase->begin(), rdbDatabase->end());
+  }
   return true;
 }
 
