@@ -42,6 +42,10 @@ To build this Redis server implementation, follow these steps:
    ./server -h
    ```  
    
+## TODO
+
+- [ ] Add GUI to visualize server, clients and stored records. [imGui](https://github.com/ocornut/imgui)
+
 ## FAQ
 
 ### Q: What Redis commands are supported by this implementation?
