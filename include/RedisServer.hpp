@@ -15,6 +15,7 @@ namespace Redis {
 class Server {
 public:
   using SharedPtr = std::shared_ptr<Redis::Server>;
+  using Reply = std::vector<std::string>;
 
   /**
    * @brief Construct a new Redis Server.
@@ -35,7 +36,7 @@ public:
    * @return std::optional<std::string> The response to the given message,
    * std::nullopt if the message parsing failed.
    */
-  std::optional<std::string> handleRequest(const std::string &message);
+  std::optional<Reply> handleRequest(const std::string &message);
 
   /**
    * @brief Is this server a replica of another master redis server.
@@ -58,10 +59,9 @@ private:
    * response.
    *
    * @param commands List of redis command with it's arguments.
-   * @return std::optional<std::string> The response to this command.
+   * @return std::optional<Reply> The response to this command.
    */
-  std::optional<std::string>
-  handleCommands(const std::vector<std::string> &commands);
+  std::optional<Reply> handleCommands(const std::vector<std::string> &commands);
 
   /**
    * @brief Get a stored value giving the key.
@@ -89,71 +89,71 @@ private:
    * @param commands The redis command and it's argument.
    * @return std::string Server response to the command.
    */
-  std::string pingCommand(const std::vector<std::string> &commands);
+  Reply pingCommand(const std::vector<std::string> &commands);
 
   /**
    * @brief Parse a `ECHO` command from redis client.
    *
    * @param commands The redis command and it's argument.
-   * @return std::string Server response to the command.
+   * @return Reply Server response to the command.
    */
-  std::string echoCommand(const std::vector<std::string> &commands);
+  Reply echoCommand(const std::vector<std::string> &commands);
 
   /**
    * @brief Parse a `GET` command from redis client.
    *
    * @param commands The redis command and it's argument.
-   * @return std::string Server response to the command.
+   * @return Reply Server response to the command.
    */
-  std::string getCommand(const std::vector<std::string> &commands);
+  Reply getCommand(const std::vector<std::string> &commands);
 
   /**
    * @brief Parse a `SET` command from redis client.
    *
    * @param commands The redis command and it's argument.
-   * @return std::string Server response to the command.
+   * @return Reply Server response to the command.
    */
-  std::string setCommand(const std::vector<std::string> &commands);
+  Reply setCommand(const std::vector<std::string> &commands);
 
   /**
    * @brief Parse a `CONFIG` command from redis client.
    *
    * @param commands The redis command and it's argument.
-   * @return std::string Server response to the command.
+   * @return Reply Server response to the command.
    */
-  std::string configCommand(const std::vector<std::string> &commands);
+  Reply configCommand(const std::vector<std::string> &commands);
 
   /**
    * @brief Parse a `KEYS` command from redis client.
    *
    * @param commands The redis command and it's argument.
-   * @return std::string Server response to the command.
+   * @return Reply Server response to the command.
    */
-  std::string keysCommand(const std::vector<std::string> &commands);
+  Reply keysCommand(const std::vector<std::string> &commands);
 
   /**
    * @brief Parse a `INFO` command from redis client.
    *
    * @param commands The redis command and it's argument.
-   * @return std::string Server response to the command.
+   * @return Reply Server response to the command.
    */
-  std::string infoCommand(const std::vector<std::string> &commands);
+  Reply infoCommand(const std::vector<std::string> &commands);
 
   /**
    * @brief Parse a `REPLCONF` command from redis client.
    *
    * @param commands The redis command and it's argument.
-   * @return std::string Server response to the command.
+   * @return Reply Server response to the command.
    */
-  std::string replconfCommand(const std::vector<std::string> &commands);
+  Reply replconfCommand(const std::vector<std::string> &commands);
 
   /**
    * @brief Parse a `PSYNC` command from redis client.
    *
    * @param commands The redis command and it's argument.
-   * @return std::string Server response to the command.
+   * @return Reply Server response to the command.
    */
-  std::string psyncCommand(const std::vector<std::string> &commands);
+  Reply psyncCommand(const std::vector<std::string> &commands);
 
   /**
    * @brief Handshake with the master server.
@@ -184,8 +184,8 @@ private:
    * @brief Lookup table for redis command and the corresponding function to
    * handle this command.
    */
-  std::unordered_map<
-      std::string, std::function<std::string(const std::vector<std::string> &)>>
+  std::unordered_map<std::string,
+                     std::function<Reply(const std::vector<std::string> &)>>
       cmdsLUT;
 
   /**

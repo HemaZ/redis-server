@@ -7,6 +7,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <string>
 using asio::ip::tcp;
 class TCPConnection : public std::enable_shared_from_this<TCPConnection> {
@@ -57,7 +58,7 @@ private:
                  std::bind(&TCPConnection::start, shared_from_this()));
       return;
     }
-    std::optional<std::string> message =
+    std::optional<Redis::Server::Reply> message =
         rServer->handleRequest(messageStr); //"+PONG\r\n";
     if (!message) {
       LOG_DEBUG("no message to send. ");
@@ -65,13 +66,29 @@ private:
                  std::bind(&TCPConnection::start, shared_from_this()));
       return;
     }
-    LOG_INFO("Sending REPLY {}", *message);
-    std::string messageAsString = *message;
-    asio::async_write(socket_, asio::buffer(messageAsString),
-                      std::bind(&TCPConnection::handle_write,
-                                shared_from_this(), std::placeholders::_1,
-                                std::placeholders::_2));
-    LOG_INFO("PONG sent");
+    LOG_INFO("Sending REPLY with {} messages ", message->size());
+    for (const auto &msg : *message) {
+      msgsQ_.push(msg);
+    }
+
+    // send_new_msg(asio::error_code(0, std::generic_category()), 0);
+    asio::post(ioContext,
+               std::bind(&TCPConnection::send_new_msg, shared_from_this(),
+                         asio::error_code(0, std::generic_category()), 0));
+  }
+
+  void send_new_msg(const asio::error_code &ec, size_t) {
+    if (msgsQ_.empty() && !ec) {
+      start();
+    } else {
+      std::string messageAsString = msgsQ_.front();
+      msgsQ_.pop();
+      LOG_INFO("Sending message: {}", messageAsString);
+      asio::async_write(socket_, asio::buffer(messageAsString),
+                        std::bind(&TCPConnection::send_new_msg,
+                                  shared_from_this(), std::placeholders::_1,
+                                  std::placeholders::_2));
+    }
   }
 
   void handle_write(const asio::error_code &ec, size_t) {
@@ -83,5 +100,6 @@ private:
   asio::io_context &ioContext;
   tcp::socket socket_;
   asio::streambuf recvMsg_;
+  std::queue<std::string> msgsQ_;
 };
 #endif

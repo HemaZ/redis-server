@@ -85,7 +85,7 @@ bool Server::handShakeMaster() {
   }
 
   LOG_INFO("RDB file received from master, {}", rdbFile);
-  fs::path rdbFilePath = fs::path(config_.dir) / fs::path("replica.rdb");
+  fs::path rdbFilePath = fs::temp_directory_path() / fs::path("replica.rdb");
   // Open a new binary file to write the RDB content
   std::ofstream outFile(rdbFilePath, std::ios::binary);
   if (!outFile) {
@@ -156,7 +156,7 @@ void Server::setValue(const std::string &key, const std::string &value,
   data_[key] = newRecord;
 }
 
-std::optional<std::string>
+std::optional<Server::Reply>
 Server::handleCommands(const std::vector<std::string> &commands) {
   std::string command = strTolower(commands[0]);
   try {
@@ -167,28 +167,28 @@ Server::handleCommands(const std::vector<std::string> &commands) {
   }
 }
 
-std::string Server::pingCommand(const std::vector<std::string> &commands) {
-  return "+PONG\r\n";
+Server::Reply Server::pingCommand(const std::vector<std::string> &commands) {
+  return Server::Reply{"+PONG\r\n"};
 }
 
-std::string Server::echoCommand(const std::vector<std::string> &commands) {
-  return "+" + commands[1] + "\r\n";
+Server::Reply Server::echoCommand(const std::vector<std::string> &commands) {
+  return Server::Reply{"+" + commands[1] + "\r\n"};
 }
 
-std::string Server::getCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::getCommand(const std::vector<std::string> &commands) {
   LOG_DEBUG("Getting the value {}", commands[1]);
   auto val = getValue(commands[1]);
   if (val) {
-    return RESP::toBString(*val);
+    return Server::Reply{RESP::toBString(*val)};
   } else {
-    return RESP::NullBString;
+    return Server::Reply{RESP::NullBString};
   }
-  return "+" + commands[1] + "\r\n";
+  return Server::Reply{"+" + commands[1] + "\r\n"};
 }
 
-std::string Server::setCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::setCommand(const std::vector<std::string> &commands) {
   if (commands.size() != 3 && commands.size() != 5) {
-    return RESP::NullBString;
+    return Server::Reply{RESP::NullBString};
   }
   std::optional<int> expiry;
   if (commands.size() == 5) {
@@ -201,21 +201,21 @@ std::string Server::setCommand(const std::vector<std::string> &commands) {
   }
   LOG_DEBUG("Setting the key {} to {}", commands[1], commands[2]);
   setValue(commands[1], commands[2], expiry);
-  return "+OK\r\n";
+  return Server::Reply{"+OK\r\n"};
 }
 
-std::string Server::configCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::configCommand(const std::vector<std::string> &commands) {
   if (commands[1] == "GET" || commands[1] == "get") {
     auto value = config_.getField(commands[2]);
     std::string valueStr = value.to_string();
-    return RESP::toStringArray({commands[2], valueStr});
+    return Server::Reply{RESP::toStringArray({commands[2], valueStr})};
   }
-  return RESP::NullBString;
+  return Server::Reply{RESP::NullBString};
 }
 
-std::string Server::keysCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::keysCommand(const std::vector<std::string> &commands) {
   if (commands.size() != 2) {
-    return RESP::NullBString;
+    return Server::Reply{RESP::NullBString};
   }
   std::string pattern = commands[1];
   if (size_t loc = pattern.find('*'); loc != std::string::npos) {
@@ -230,10 +230,10 @@ std::string Server::keysCommand(const std::vector<std::string> &commands) {
     }
   }
   LOG_DEBUG("Matched KEYS {}", matchedKeys);
-  return RESP::toStringArray(matchedKeys);
+  return Server::Reply{RESP::toStringArray(matchedKeys)};
 }
 
-std::string Server::infoCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::infoCommand(const std::vector<std::string> &commands) {
   std::vector<std::string> info;
   if (isReplica()) {
     info.push_back("role:slave");
@@ -247,35 +247,40 @@ std::string Server::infoCommand(const std::vector<std::string> &commands) {
 
   if (commands.size() == 2 && commands[1] == "replication") {
     // Return replication info only
-    return infoBString;
+    return Server::Reply{infoBString};
   }
 
-  return infoBString; // return all available options, more stuff in the future.
+  return Server::Reply{
+      infoBString}; // return all available options, more stuff in the future.
 }
 
-std::string Server::replconfCommand(const std::vector<std::string> &commands) {
+Server::Reply
+Server::replconfCommand(const std::vector<std::string> &commands) {
   if (commands.size() != 3) {
-    return RESP::NullBString;
+    return Server::Reply{RESP::NullBString};
   }
-  return "+OK\r\n";
+  return Server::Reply{"+OK\r\n"};
 }
 
-std::string Server::psyncCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::psyncCommand(const std::vector<std::string> &commands) {
   if (commands.size() != 3) {
-    return RESP::NullBString;
+    return Server::Reply{RESP::NullBString};
   }
-  return "+FULLRESYNC " + masterReplId + " " +
-         std::to_string(masterReplOffset) + "\r\n";
+  Server::Reply reply;
+  reply.push_back("+FULLRESYNC " + masterReplId + " " +
+                  std::to_string(masterReplOffset) + "\r\n");
+  reply.push_back("$0\r\n");
+  return reply;
 }
 
-std::optional<std::string> Server::handleRequest(const std::string &message) {
+std::optional<Server::Reply> Server::handleRequest(const std::string &message) {
   if (message.empty()) {
     LOG_DEBUG("Received an empty message");
-    return "\r\n";
+    return Server::Reply{"\r\n"};
   }
   if (message[0] != RESP::DataType::ARRAY) {
     LOG_DEBUG("Received a non array command {}", message);
-    return "\r\n";
+    return Server::Reply{"\r\n"};
   }
   std::optional<std::vector<std::string>> commands = RESP::parseArray(message);
   if (!commands) {
