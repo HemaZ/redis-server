@@ -58,11 +58,17 @@ int main(int argc, char **argv) {
     global_logger_a->set_log_level(quill::LogLevel::TraceL3);
 
   // Creating the server
+  asio::io_context io_context;
   try {
-    Redis::Server::SharedPtr redisServer =
-        std::make_shared<Redis::Server>(port, masterIp, masterPort);
+    Redis::Server::SharedPtr redisServer;
+    if (masterIp.has_value()) {
+      redisServer = std::make_shared<Redis::Server>(port, *masterIp,
+                                                    *masterPort, io_context);
+    } else {
+      redisServer = std::make_shared<Redis::Server>(port);
+    }
+
     LOG_INFO("Starting the server on port {}", port);
-    asio::io_context io_context;
     TCPServer server(io_context, port, redisServer);
     server.start();
     io_context.run();

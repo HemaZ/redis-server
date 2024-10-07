@@ -3,28 +3,35 @@
 #include "Logging.hpp"
 #include "RDBFile.hpp"
 #include "RESP/RESP.hpp"
+#include <TCPClient.hpp>
+#include <TCPConnection.hpp>
 #include <asio.hpp>
 #include <filesystem>
 #include <regex>
 #include <thread>
-
 namespace fs = std::filesystem;
 
 namespace Redis {
 
-Server::Server(int port, std::optional<std::string> masterIp,
-               std::optional<int> masterPort)
+Server::Server(int port) : port(port) { init(); }
+
+Server::Server(int port, std::string masterIp, int masterPort,
+               asio::io_context &ioContext)
     : port(port), masterIp(masterIp), masterPort(masterPort),
       masterReplId(randomString(40)) {
-
-  initCmdsLUT();
-
-  if (isReplica() && !handShakeMaster()) {
-    ioContext.stop();
-    ioThread.join();
+  init();
+  if (isReplica() && !handShakeMaster(ioContext)) {
     throw std::runtime_error("Couldn't connect to the master server");
   }
+}
 
+std::size_t Server::registerClient(std::weak_ptr<TCPConnection> clientPtr) {
+  clients.push_back(clientPtr);
+  return clients.size() - 1;
+}
+
+void Server::init() {
+  initCmdsLUT();
   fs::path rdbFilePath = fs::path(config_.dir) / fs::path(config_.dbfilename);
   auto rdbDatabase = parseRDBFile(rdbFilePath);
   if (rdbDatabase) {
@@ -34,16 +41,19 @@ Server::Server(int port, std::optional<std::string> masterIp,
   }
 }
 
-Server::~Server() {
-  if (isReplica()) {
-    ioContext.stop();
-    ioThread.join();
+void Server::propagateToReplicas(const std::vector<std::string> &commands) {
+  std::string command = RESP::toStringArray(commands);
+  for (const auto &replica : replicas) {
+    if (auto ptr = replica.lock(); ptr != nullptr) {
+      LOG_INFO("Sending a message to the replica ");
+      ptr->send_message(command);
+    }
   }
 }
 
-bool Server::handShakeMaster() {
-  replicaClient.emplace(ioContext, *masterIp, *masterPort);
-  ioThread = std::thread([&] { ioContext.run(); });
+bool Server::handShakeMaster(asio::io_context &ioContext) {
+  replicaClient = TCPClient::create(ioContext, *masterIp, *masterPort);
+  // ioThread = std::thread([&] { ioContext.run(); });
   LOG_INFO("Pinging the master server on {} {}", *masterIp, *masterPort);
   auto readWrite = [&](const std::string_view &cmd,
                        const std::string_view &expectedReply) -> bool {
@@ -108,28 +118,49 @@ bool Server::handShakeMaster() {
              config_.dbfilename, rdbDatabase->size());
     data_.insert(rdbDatabase->begin(), rdbDatabase->end());
   }
+  replicaClient->setCallback(
+      [this](const std::string &msg) { handleRequest(msg, 0); });
+  replicaClient->listen();
+  // asio::post(ioContext, [this]() { replicaClient->listen(); });
+  // replicaClient->listen();
+
+  // TODO check why the client is not getting the master messages
+  // replicaThread = std::thread([&] {
+  //   while (true) {
+  //     std::string msg;
+  //     replicaClient->read(msg);
+  //     LOG_INFO("Received message from master {}", msg);
+  //     handleRequest(msg, 0);
+  //     // asio::post()
+  //     // TODO optimize this part, use the iocontext to post a lambda
+  //     // which calls async_read_until in the client
+  //   }
+  // });
+
   return true;
 }
 
 void Server::initCmdsLUT() {
-  cmdsLUT["ping"] =
-      std::bind(&Server::pingCommand, this, std::placeholders::_1);
-  cmdsLUT["command"] =
-      std::bind(&Server::pingCommand, this, std::placeholders::_1);
-  cmdsLUT["echo"] =
-      std::bind(&Server::echoCommand, this, std::placeholders::_1);
-  cmdsLUT["get"] = std::bind(&Server::getCommand, this, std::placeholders::_1);
-  cmdsLUT["set"] = std::bind(&Server::setCommand, this, std::placeholders::_1);
-  cmdsLUT["config"] =
-      std::bind(&Server::configCommand, this, std::placeholders::_1);
-  cmdsLUT["keys"] =
-      std::bind(&Server::keysCommand, this, std::placeholders::_1);
-  cmdsLUT["info"] =
-      std::bind(&Server::infoCommand, this, std::placeholders::_1);
-  cmdsLUT["replconf"] =
-      std::bind(&Server::replconfCommand, this, std::placeholders::_1);
-  cmdsLUT["psync"] =
-      std::bind(&Server::psyncCommand, this, std::placeholders::_1);
+  cmdsLUT["ping"] = std::bind(&Server::pingCommand, this, std::placeholders::_1,
+                              std::placeholders::_2);
+  cmdsLUT["command"] = std::bind(&Server::pingCommand, this,
+                                 std::placeholders::_1, std::placeholders::_2);
+  cmdsLUT["echo"] = std::bind(&Server::echoCommand, this, std::placeholders::_1,
+                              std::placeholders::_2);
+  cmdsLUT["get"] = std::bind(&Server::getCommand, this, std::placeholders::_1,
+                             std::placeholders::_2);
+  cmdsLUT["set"] = std::bind(&Server::setCommand, this, std::placeholders::_1,
+                             std::placeholders::_2);
+  cmdsLUT["config"] = std::bind(&Server::configCommand, this,
+                                std::placeholders::_1, std::placeholders::_2);
+  cmdsLUT["keys"] = std::bind(&Server::keysCommand, this, std::placeholders::_1,
+                              std::placeholders::_2);
+  cmdsLUT["info"] = std::bind(&Server::infoCommand, this, std::placeholders::_1,
+                              std::placeholders::_2);
+  cmdsLUT["replconf"] = std::bind(&Server::replconfCommand, this,
+                                  std::placeholders::_1, std::placeholders::_2);
+  cmdsLUT["psync"] = std::bind(&Server::psyncCommand, this,
+                               std::placeholders::_1, std::placeholders::_2);
   LOG_DEBUG("Init CMDS LUT with {} commands", cmdsLUT.size());
 }
 
@@ -157,25 +188,29 @@ void Server::setValue(const std::string &key, const std::string &value,
 }
 
 std::optional<Server::Reply>
-Server::handleCommands(const std::vector<std::string> &commands) {
+Server::handleCommands(const std::vector<std::string> &commands,
+                       std::size_t clientId) {
   std::string command = strTolower(commands[0]);
   try {
-    return cmdsLUT.at(command)(commands);
+    return cmdsLUT.at(command)(commands, clientId);
   } catch (const std::out_of_range &e) {
     LOG_ERROR("Unrecognised command {}", command);
     return std::nullopt;
   }
 }
 
-Server::Reply Server::pingCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::pingCommand(const std::vector<std::string> &commands,
+                                  std::size_t clientId) {
   return Server::Reply{"+PONG\r\n"};
 }
 
-Server::Reply Server::echoCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::echoCommand(const std::vector<std::string> &commands,
+                                  std::size_t clientId) {
   return Server::Reply{"+" + commands[1] + "\r\n"};
 }
 
-Server::Reply Server::getCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::getCommand(const std::vector<std::string> &commands,
+                                 std::size_t clientId) {
   LOG_DEBUG("Getting the value {}", commands[1]);
   auto val = getValue(commands[1]);
   if (val) {
@@ -186,7 +221,8 @@ Server::Reply Server::getCommand(const std::vector<std::string> &commands) {
   return Server::Reply{"+" + commands[1] + "\r\n"};
 }
 
-Server::Reply Server::setCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::setCommand(const std::vector<std::string> &commands,
+                                 std::size_t clientId) {
   if (commands.size() != 3 && commands.size() != 5) {
     return Server::Reply{RESP::NullBString};
   }
@@ -201,10 +237,12 @@ Server::Reply Server::setCommand(const std::vector<std::string> &commands) {
   }
   LOG_DEBUG("Setting the key {} to {}", commands[1], commands[2]);
   setValue(commands[1], commands[2], expiry);
+  propagateToReplicas(commands);
   return Server::Reply{"+OK\r\n"};
 }
 
-Server::Reply Server::configCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::configCommand(const std::vector<std::string> &commands,
+                                    std::size_t clientId) {
   if (commands[1] == "GET" || commands[1] == "get") {
     auto value = config_.getField(commands[2]);
     std::string valueStr = value.to_string();
@@ -213,7 +251,8 @@ Server::Reply Server::configCommand(const std::vector<std::string> &commands) {
   return Server::Reply{RESP::NullBString};
 }
 
-Server::Reply Server::keysCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::keysCommand(const std::vector<std::string> &commands,
+                                  std::size_t clientId) {
   if (commands.size() != 2) {
     return Server::Reply{RESP::NullBString};
   }
@@ -233,7 +272,8 @@ Server::Reply Server::keysCommand(const std::vector<std::string> &commands) {
   return Server::Reply{RESP::toStringArray(matchedKeys)};
 }
 
-Server::Reply Server::infoCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::infoCommand(const std::vector<std::string> &commands,
+                                  std::size_t clientId) {
   std::vector<std::string> info;
   if (isReplica()) {
     info.push_back("role:slave");
@@ -254,15 +294,16 @@ Server::Reply Server::infoCommand(const std::vector<std::string> &commands) {
       infoBString}; // return all available options, more stuff in the future.
 }
 
-Server::Reply
-Server::replconfCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::replconfCommand(const std::vector<std::string> &commands,
+                                      std::size_t clientId) {
   if (commands.size() != 3) {
     return Server::Reply{RESP::NullBString};
   }
   return Server::Reply{"+OK\r\n"};
 }
 
-Server::Reply Server::psyncCommand(const std::vector<std::string> &commands) {
+Server::Reply Server::psyncCommand(const std::vector<std::string> &commands,
+                                   std::size_t clientId) {
   if (commands.size() != 3) {
     return Server::Reply{RESP::NullBString};
   }
@@ -270,10 +311,18 @@ Server::Reply Server::psyncCommand(const std::vector<std::string> &commands) {
   reply.push_back("+FULLRESYNC " + masterReplId + " " +
                   std::to_string(masterReplOffset) + "\r\n");
   reply.push_back("$0\r\n");
+  LOG_INFO("Marking client {} as a replica", clientId);
+  if (clientId > 0 && clientId < clients.size()) {
+    replicas.push_back(clients[clientId]);
+  } else {
+    LOG_ERROR("Replica is requesting SYNC but no client id is registered.");
+  }
+
   return reply;
 }
 
-std::optional<Server::Reply> Server::handleRequest(const std::string &message) {
+std::optional<Server::Reply> Server::handleRequest(const std::string &message,
+                                                   std::size_t clientId) {
   if (message.empty()) {
     LOG_DEBUG("Received an empty message");
     return Server::Reply{"\r\n"};
@@ -287,7 +336,7 @@ std::optional<Server::Reply> Server::handleRequest(const std::string &message) {
     LOG_DEBUG("Received a non array command {}", message);
     return std::nullopt;
   }
-  return handleCommands(*commands);
+  return handleCommands(*commands, clientId);
 }
 
 } // namespace Redis

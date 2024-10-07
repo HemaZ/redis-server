@@ -26,7 +26,9 @@ public:
    */
   static SharedPtr create(asio::io_context &io_context,
                           Redis::Server::SharedPtr redisPtr) {
-    return std::make_shared<TCPConnection>(io_context, redisPtr);
+    auto ptr = std::make_shared<TCPConnection>(io_context, redisPtr);
+    ptr->setClientId(redisPtr->registerClient(ptr->weak_from_this()));
+    return ptr;
   }
 
   /**
@@ -46,8 +48,16 @@ public:
                                      shared_from_this(),
                                      std::placeholders::_1));
   }
+  void setClientId(std::size_t id) { clientId = id; }
+
+  void send_message(const std::string &msg) {
+    LOG_INFO("Sending message: {}", msg);
+    asio::async_write(socket_, asio::buffer(msg),
+                      [](const asio::error_code &ec, size_t) {});
+  }
 
 private:
+  std::size_t clientId = 0;
   void handle_new_message(const std::error_code &error) {
     std::string messageStr =
         std::string((std::istreambuf_iterator<char>(&recvMsg_)),
@@ -59,7 +69,7 @@ private:
       return;
     }
     std::optional<Redis::Server::Reply> message =
-        rServer->handleRequest(messageStr); //"+PONG\r\n";
+        rServer->handleRequest(messageStr, clientId); //"+PONG\r\n";
     if (!message) {
       LOG_DEBUG("no message to send. ");
       asio::post(ioContext,
